@@ -1,56 +1,50 @@
 # file-corruptor
-A file corruptor in Python. Works well with large files.
+Makes a corrupt copy of a file. Works well with large files. Good for romhacks, pranks (**at your own risk**), etc.
 
 Developed with Python 3 under 64-bit Windows.
 
 ## Command line arguments
 
-Syntax: [*options*] *source_file* *target_file*
+Syntax: [*options*] *input_file* *output_file*
 
 Integer arguments support hexadecimal values with the prefix `0x` (e.g. `0xff` = 255).
 
 ### *options*
 
-#### `-b` *count* or `--byte-count`=*count*
-*count* is the number of bytes to corrupt:
-* minimum: 1
-* default: 1
-* maximum: same as *length* (see below)
+* `-b` *count* or `--byte-count`=*count*
+  * The number of bytes to corrupt.
+  * *count* is an integer:
+    * minimum: 1
+    * default: 1
+    * maximum: same as *length* (see below)
+* `-m` *method* or `--method`=*method*
+  * How to corrupt each byte.
+  * *method* is one of the following (case insensitive):
+    * `FL`: flip the least significant bit (XOR with `0x01`)
+    * `FM`: flip the most significant bit (XOR with `0x80`)
+    * `FA`: flip all bits (XOR with `0xff`)
+    * `FR`: flip a random bit (the default)
+    * `I`: increment (add one)
+    * `D`: decrement (subtract one)
+    * `R`: randomize (replace with any value but the original)
+* `-s` *start* or `--start`=*start* and `-l` *length* or `--length`=*length*
+  * Define the range where the addresses to corrupt will be picked.
+  * The range is *start* to *start* + *length* &minus; 1, inclusive.
+  * *start* is an integer:
+    * minimum: 0 (the first byte of the file)
+    * default: 0
+    * maximum: size of *input_file* &minus; 1
+  * *length* is an integer:
+    * minimum: 1
+    * default: size of *input_file* &minus; *start*
+    * maximum: size of *input_file* &minus; *start*
 
-No byte (address) will be corrupted more than once.
+### *input_file*
+* The file to read.
 
-#### `-m` *method* or `--method`=*method*
-*method* is how to corrupt each byte:
-* `FL`: flip the least significant bit
-* `FM`: flip the most significant bit
-* `FA`: flip all bits
-* `FR`: flip a random bit (the default)
-* `I`: increment
-* `D`: decrement
-* `R`: randomize
-
-This argument is case insensitive.
-
-#### `-s` *start* or `--start`=*start* and `-l` *length* or `--length`=*length*
-The addresses to corrupt will be randomly picked from the range *start* to *start* + *length* - 1, inclusive.
-
-*start* is an integer:
-* minimum: 0 (the first byte of the file)
-* default: 0
-* maximum: file size minus one
-
-*length* is an integer:
-* minimum: 1
-* default: file size minus *start*
-* maximum: file size minus *start*
-
-With the default values, any address may be corrupted.
-
-### *source_file*
-The file to read.
-
-### *target_file*
-The file to write. The file must not already exist (it will not be overwritten).
+### *output_file*
+* The file to write.
+* The file must not already exist (it will not be overwritten).
 
 ## Examples
 
