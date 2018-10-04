@@ -5,9 +5,12 @@ Developed with Python 3 under 64-bit Windows.
 
 ## Command line arguments
 
-[*options*] *source_file* *target_file*
+Syntax: [*options*] *source_file* *target_file*
+
+Integer arguments support hexadecimal values with the prefix `0x` (e.g. `0xff` = 255).
 
 ### *options*
+
 #### `-b` *count* or `--byte-count`=*count*
 *count* is the number of bytes to corrupt:
 * minimum: 1
@@ -49,14 +52,25 @@ The file to read.
 ### *target_file*
 The file to write. The file must not already exist (it will not be overwritten).
 
-Integer arguments support hexadecimal values with the prefix "0x".
-
 ## Examples
 
 Read `smb.nes`, corrupt one byte anywhere, save as `corrupt.nes`:
 
-`python file-corruptor.py smb.nes corrupt.nes`
+```
+C:\>python corruptor.py smb.nes corrupt.nes
+0x37d6: 0x04 -> 0x84
+```
 
-Read `smb.nes`, corrupt 4 bytes between 0x8000...0x8fff, inclusive, save as `corrupt.nes`:
+Read `smb.nes`, corrupt 8 bytes between `0x8010`&ndash;`0x8fff`, inclusive, by flipping all their bits, save as `corrupt.nes`:
 
-`python ??? smb.nes corrupt.nes 4`
+```
+C:\>python corruptor.py -b 8 -m fa -s 0x8010 -l 0x1000 smb.nes corrupt.nes
+0x806e: 0x03 -> 0xfc
+0x8280: 0xff -> 0x00
+0x84b1: 0xff -> 0x00
+0x89e6: 0x38 -> 0xc7
+0x8a80: 0x77 -> 0x88
+0x8e03: 0x88 -> 0x77
+0x8eb8: 0x2f -> 0xd0
+0x8ee9: 0x10 -> 0xef
+```
