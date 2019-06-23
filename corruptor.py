@@ -4,157 +4,204 @@ import random  # not for cryptographic use!
 import sys
 
 # maximum number of bytes to read from file to RAM at a time
-MAX_CHUNK_SIZE = 2 ** 20
+MAX_CHUNK_SIZE = 1 << 20
+
+# for getopt
+SHORT_OPTS = "c:m:x:s:l:o:"
+LONG_OPTS = (
+    "count=", "method=", "xor-value=", "start=", "length=", "output-file="
+)
+
+# the maximum value of a byte
+BYTE_MAX = 0xff
 
 def parse_command_line_arguments():
     """Parse command line arguments using getopt."""
 
-    longOpts = ("byte-count=", "method=", "start=", "length=")
     try:
-        (opts, args) = getopt.getopt(sys.argv[1:], "b:m:s:l:", longOpts)
+        (opts, args) = getopt.getopt(sys.argv[1:], SHORT_OPTS, LONG_OPTS)
     except getopt.GetoptError:
         exit("Error: unrecognized argument. See the readme file.")
 
     opts = dict(opts)
 
     # number of bytes to corrupt
-    byteCount = opts.get("--byte-count", opts.get("-b", "1"))
+    byteCount = opts.get("--count", opts.get("-c", "1"))
     try:
         byteCount = int(byteCount, 0)
     except ValueError:
-        exit("Error: number of bytes to corrupt is not an integer.")
+        exit("Error: byte count is not an integer.")
 
-    # corruption method
-    method = opts.get("--method", opts.get("-m", "FR")).upper()
-    if method not in ("FL", "FM", "FA", "FR", "I", "D", "R"):
-        exit("Error: invalid corruption method.")
+    # method
+    method = opts.get("--method", opts.get("-m", "F")).upper()
+    if method not in ("F", "I", "D", "R", "X"):
+        exit("Error: invalid method.")
 
-    # start address
+    # XOR value
+    XORValue = opts.get("--xor-value", opts.get("-x", "0xff"))
+    try:
+        XORValue = int(XORValue, 0)
+        if not 0x00 <= XORValue <= 0xff:
+            raise ValueError
+    except ValueError:
+        exit("Error: invalid XOR value.")
+
+    # start address (validated later)
     start = opts.get("--start", opts.get("-s", "0"))
     try:
         start = int(start, 0)
     except ValueError:
         exit("Error: start address is not an integer.")
 
-    # length (-1 = default)
-    length = opts.get("--length", opts.get("-l", "-1"))
-    try:
-        length = int(length, 0)
-    except ValueError:
-        exit("Error: length is not an integer.")
-
-    # files
-    if len(args) != 2:
-        exit("Error: incorrect number of arguments. See the readme file.")
-    (source, target) = args
+    # length (None = default, validated later)
+    length = opts.get("--length", opts.get("-l"))
+    if length is not None:
+        try:
+            length = int(length, 0)
+        except ValueError:
+            exit("Error: length is not an integer.")
 
     # input file
+    if len(args) != 1:
+        exit("Error: incorrect number of arguments. See the readme file.")
+    source = args[0]
+
+    # input file must exist
     if not os.path.isfile(source):
         exit("Error: input file not found.")
+
+    # get input file size
     try:
         size = os.path.getsize(source)
     except OSError:
         exit("Error getting input file size.")
-    if size == 0:
-        exit("Error: the file is empty.")
 
-    # validate integer arguments against file size
-    if not 0 <= start <= size - 1:
+    # input file must not be empty
+    if size == 0:
+        exit("Error: the input file is empty.")
+
+    # validate start address against input file size
+    if not 0 <= start < size:
         exit("Error: invalid start address.")
-    if length == -1:
+
+    # use default length or validate it against input file size
+    if length is None:
         length = size - start
-    elif not 1 <= length <= size - start:
+    elif not 0 < length <= size - start:
         exit("Error: invalid length.")
+
+    # validate number of bytes to corrupt against input file size
     if not 1 <= byteCount <= length:
         exit("Error: invalid number of bytes to corrupt.")
 
-    # output file
+    # output file (if unspecified, get nonexistent default name)
+    target = opts.get("--output-file", opts.get("-o"))
+    if target is None:
+        (root, ext) = os.path.splitext(source)
+        for i in range(1000):
+            target = "{:s}-corrupt{:d}{:s}".format(root, i, ext)
+            if not os.path.exists(target):
+                break
+
+    # output file must not exist
     if os.path.exists(target):
         exit("Error: target file already exists.")
-    targetDir = os.path.dirname(target)
-    if targetDir != "" and not os.path.isdir(targetDir):
+
+    # output directory must exist
+    dir = os.path.dirname(target)
+    if dir != "" and not os.path.isdir(dir):
         exit("Error: target directory not found.")
 
     return {
-        "byteCount": byteCount,
+        "count": byteCount,
         "method": method,
+        "XORValue": XORValue,
         "start": start,
         "length": length,
         "source": source,
         "target": target,
     }
 
-def get_addresses_to_corrupt(settings):
-    """Yield addresses to corrupt in ascending order."""
+def pick_addresses(opts):
+    """Randomly pick addresses to corrupt. Yield in ascending order."""
 
-    range_ = range(settings["start"], settings["start"] + settings["length"])
-    for address in sorted(random.sample(range_, settings["byteCount"])):
+    range_ = range(opts["start"], opts["start"] + opts["length"])
+    addresses = random.sample(range_, opts["count"])
+    for address in sorted(addresses):
         yield address
 
-def read_file(handle, bytesLeft):
-    """Read a slice starting from current position in file.
-    Generate one chunk per call."""
+def read_slice(handle, bytesLeft):
+    """Read slice from file, starting from current position.
+    Yield one chunk per call."""
 
     while bytesLeft:
         chunkSize = min(bytesLeft, MAX_CHUNK_SIZE)
         yield handle.read(chunkSize)
         bytesLeft -= chunkSize
 
-def corrupt_byte(byte, method):
-    if method == "FL":
-        return byte ^ 0b0000_0001
-    if method == "FM":
-        return byte ^ 0b1000_0000
-    if method == "FA":
-        return byte ^ 0b1111_1111
-    if method == "FR":
-        bitmask = 1 << random.randrange(8)  # a random power of two
-        return byte ^ bitmask
+def copy_slice(source, target, length):
+    """Copy slice from one file to another."""
+
+    for chunk in read_slice(source, length):
+        target.write(chunk)
+
+def corrupt_byte(byte, method, XORValue):
+    """Corrupt one byte."""
+
+    if method == "F":
+        # flip one randomly-selected bit (XOR with random power of two)
+        return byte ^ (1 << random.randrange(8))
     if method == "I":
-        return (byte + 1) % 256
+        # increment
+        return (byte + 1) & BYTE_MAX
     if method == "D":
-        return (byte - 1) % 256
+        # decrement
+        return (byte - 1) & BYTE_MAX
     if method == "R":
-        values = set(range(256)) - set(byte)  # any other value
+        # randomize (any value but the original)
+        values = list(range(byte)) + list(range(byte + 1, BYTE_MAX + 1))
         return random.choice(values)
+    if method == "X":
+        # XOR
+        return byte ^ XORValue
 
     exit("Invalid method.")  # should never happen
 
-def generate_corrupt_file(source, settings):
-    """Read input file, yield output file in chunks, print changes."""
+def copy_and_corrupt_byte(source, target, opts):
+    """Read one byte from one file, corrupt it, write to another file,
+    print the change."""
+
+    addr = source.tell()
+    origByte = source.read(1)[0]
+    corruptByte = corrupt_byte(origByte, opts["method"], opts["XORValue"])
+    target.write(bytes((corruptByte,)))
+
+    print("0x{:04x}: 0x{:02x} -> 0x{:02x}".format(addr, origByte, corruptByte))
+
+def corrupt_file(source, target, opts):
+    """Read input file, write corrupt output file, print changes."""
 
     fileSize = source.seek(0, 2)
     source.seek(0)
+    target.seek(0)
 
-    # maximum length of address in hexadecimal
-    maxAddrLen = len(format(settings["start"] + settings["length"] - 1, "x"))
-    # line format for printing the changes
-    lineFormat = "0x{{:0{:d}x}}: 0x{{:02x}} -> 0x{{:02x}}".format(maxAddrLen)
+    # for each address to corrupt...
+    for address in pick_addresses(opts):
+        # copy unchanged data up to but not including corrupt byte
+        copy_slice(source, target, address - source.tell())
+        # corrupt one byte
+        copy_and_corrupt_byte(source, target, opts)
 
-    for address in get_addresses_to_corrupt(settings):
-        # copy unchanged data
-        for chunk in read_file(source, address - source.tell()):
-            yield chunk
-        # corrupt a byte
-        oldByte = source.read(1)[0]
-        newByte = corrupt_byte(oldByte, settings["method"])
-        yield bytes((newByte,))
-        # print the change
-        print(lineFormat.format(address, oldByte, newByte))
-
-    # copy the last unchanged data
-    for chunk in read_file(source, fileSize - source.tell()):
-        yield chunk
+    # copy unchanged data after last corrupt byte
+    copy_slice(source, target, fileSize - source.tell())
 
 def main():
-    settings = parse_command_line_arguments()
+    opts = parse_command_line_arguments()
 
     try:
-        with open(settings["source"], "rb") as source, \
-        open(settings["target"], "wb") as target:
-            target.seek(0)
-            for chunk in generate_corrupt_file(source, settings):
-                target.write(chunk)
+        with open(opts["source"], "rb") as source, \
+        open(opts["target"], "wb") as target:
+            corrupt_file(source, target, opts)
     except OSError:
         exit("File read/write error.")
 
