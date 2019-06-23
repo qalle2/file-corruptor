@@ -49,10 +49,11 @@ Integer arguments support hexadecimal values with the prefix `0x` (e.g. `0xff` =
   * The file must not already exist (it will not be overwritten).
   * Default: input file name with `-corrupt#` inserted before the extension, where `#` is the first integer between 0 and 999 that results in a nonexistent file (e.g. `smb.nes` &rarr; `smb-corrupt0.nes`, `smb-corrupt1.nes`, etc.).
 
-(In other words, with default `-s` and `-l`, the addresses to corrupt will be picked from anywhere in the file.)
+With default `-s` and `-l`, the addresses to corrupt will be picked from anywhere in the file.
 
 ### *input_file*
 * The file to read.
+* Required.
 
 ## Examples
 
