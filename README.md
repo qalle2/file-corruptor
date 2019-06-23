@@ -1,70 +1,75 @@
 # file-corruptor
-Makes a corrupt copy of a file. Works well with large files. Good for romhacks, pranks (**at your own risk**), etc.
+Makes a corrupt copy of a file. The bytes to corrupt will be randomly picked from the specified address range. Works well with large files. Good for romhacks, pranks (**at your own risk**), etc.
 
 Developed with Python 3 under 64-bit Windows.
 
 ## Command line arguments
 
-Syntax: [*options*] *input_file* *output_file*
+Syntax: [*options*] *input_file*
 
 Integer arguments support hexadecimal values with the prefix `0x` (e.g. `0xff` = 255).
 
 ### *options*
 
-* `-b` *count* or `--byte-count`=*count*
+* `-c` *count* or `--count`=*count*
   * The number of bytes to corrupt.
   * *count* is an integer:
     * minimum: 1
     * default: 1
     * maximum: same as *length* (see below)
 * `-m` *method* or `--method`=*method*
-  * How to corrupt each byte.
+  * How to corrupt (change) each byte.
   * *method* is one of the following (case insensitive):
-    * `FL`: flip the least significant bit (XOR with `0x01`)
-    * `FM`: flip the most significant bit (XOR with `0x80`)
-    * `FA`: flip all bits (XOR with `0xff`)
-    * `FR`: flip a random bit (the default)
-    * `I`: increment (add one)
-    * `D`: decrement (subtract one)
+    * `F`: flip one randomly-selected bit (the default; e.g. `0x00` &rarr; `0x80`/`0x40`/etc.)
+    * `I`: increment (add one; `0xff` overflows to `0x00`)
+    * `D`: decrement (subtract one; `0x00` underflows to `0xff`)
     * `R`: randomize (replace with any value but the original)
-* `-s` *start* or `--start`=*start* and `-l` *length* or `--length`=*length*
-  * Define the range where the addresses to corrupt will be picked.
-  * The range is *start* to *start* + *length* &minus; 1, inclusive.
+    * `X`: XOR the byte with a constant (see `-x`)
+* `-x` *value* or `--xor-value`=*value*
+  * The constant to XOR each byte with.
+  * Has no effect with *method*s other than `X`.
+  * *value* is an integer:
+    * minimum: `0x00`
+    * default: `0xff`
+    * maximum: `0xff`
+* `-s` *start* or `--start`=*start*
+  * The start of the address range where the bytes to corrupt will be picked from.
   * *start* is an integer:
     * minimum: 0 (the first byte of the file)
     * default: 0
-    * maximum: size of *input_file* &minus; 1
+    * maximum: size of *input_file* in bytes, minus one
+* `-l` *length* or `--length`=*length*
+  * The length of the address range where the bytes to corrupt will be picked from.
   * *length* is an integer:
     * minimum: 1
-    * default: size of *input_file* &minus; *start*
-    * maximum: size of *input_file* &minus; *start*
+    * default: size of *input_file* in bytes, minus *start*
+    * maximum: size of *input_file* in bytes, minus *start*
+* `-o` *file* or `--output-file`=*file*
+  * The file to write.
+  * The file must not already exist (it will not be overwritten).
+  * Default: input file name with `-corrupt#` inserted before the extension, where `#` is the first integer between 0 and 999 that results in a nonexistent file (e.g. `smb.nes` &rarr; `smb-corrupt0.nes`, `smb-corrupt1.nes`, etc.).
+
+(In other words, with default `-s` and `-l`, the addresses to corrupt will be picked from anywhere in the file.)
 
 ### *input_file*
 * The file to read.
 
-### *output_file*
-* The file to write.
-* The file must not already exist (it will not be overwritten).
-
 ## Examples
 
-Read `smb.nes`, corrupt one byte anywhere, save as `corrupt.nes`:
+Read `smb.nes`, corrupt one byte anywhere by flipping a randomly selected bit, save as `smb-corrupt0.nes` (or `smb-corrupt1.nes` if it already exists, etc.):
 
 ```
-C:\>python corruptor.py smb.nes corrupt.nes
-0x37d6: 0x04 -> 0x84
+python corruptor.py smb.nes
+0x63df: 0x08 -> 0x48
 ```
 
-Read `smb.nes`, corrupt 8 bytes between `0x9010`&ndash;`0x980f`, inclusive, by flipping all bits, save as `corrupt.nes`:
+Read `smb.nes`, corrupt 5 bytes between `0x2010`&ndash;`0x300f`, inclusive, by flipping the most significant bits, save as `corrupt.nes`:
 
 ```
-C:\>python corruptor.py -b 8 -m fa -s 0x9010 -l 0x800 smb.nes corrupt.nes
-0x90af: 0x00 -> 0xff
-0x9100: 0xfe -> 0x01
-0x9165: 0x60 -> 0x9f
-0x922c: 0x00 -> 0xff
-0x9240: 0xfe -> 0x01
-0x9338: 0x00 -> 0xff
-0x9410: 0xfe -> 0x01
-0x9694: 0x3c -> 0xc3
+python corruptor.py -c 5 -m x -x 0x80 -s 0x2010 -l 0x1000 -o corrupt.nes smb.nes
+0x263b: 0xdc -> 0x5c
+0x2879: 0xf9 -> 0x79
+0x2a94: 0x00 -> 0x80
+0x2aea: 0xd9 -> 0x59
+0x2dec: 0x47 -> 0xc7
 ```
