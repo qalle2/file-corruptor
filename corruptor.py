@@ -1,133 +1,120 @@
+"""Corrupts a file."""
+
 import getopt
-import os.path
+import os
 import random  # not for cryptographic use!
 import sys
 
-# maximum number of bytes to read from file to RAM at a time
-MAX_CHUNK_SIZE = 1 << 20
+def parse_integer(value, min_, max_, description):
+    """Parse integer from command line arguments."""
 
-# for getopt
-SHORT_OPTS = "c:m:x:s:l:o:"
-LONG_OPTS = (
-    "count=", "method=", "xor-value=", "start=", "length=", "output-file="
-)
+    try:
+        value = int(value, 0)
+        if min_ is not None and value < min_:
+            raise ValueError
+        if max_ is not None and value > max_:
+            raise ValueError
+    except ValueError:
+        sys.exit("Invalid command line integer argument: " + description)
+    return value
 
-# the maximum value of a byte
-BYTE_MAX = 0xff
+def get_source_size(source):
+    """Get size of source file."""
+
+    if not os.path.isfile(source):
+        sys.exit("Input file not found.")
+    try:
+        fileSize = os.path.getsize(source)
+    except OSError:
+        sys.exit("Error getting input file size.")
+    if fileSize == 0:
+        sys.exit("Input file is empty.")
+    return fileSize
+
+def create_target_filename(source):
+    """Create name for target file from source file. (If an unused filename cannot be found, just
+    give up and return the last name we attempted.)"""
+
+    (root, extension) = os.path.splitext(source)
+    for n in range(1, 1000 + 1):
+        target = "{:s}-corrupt{:d}{:s}".format(root, n, extension)
+        if not os.path.exists(target):
+            break
+    return target
+
+def validate_target_filename(target):
+    """Validate name of target file."""
+
+    if os.path.exists(target):
+        sys.exit("Output file already exists.")
+    dir_ = os.path.dirname(target)
+    if dir_ != "" and not os.path.isdir(dir_):
+        sys.exit("Output directory not found.")
 
 def parse_command_line_arguments():
     """Parse command line arguments using getopt."""
 
+    shortOpts = "c:m:x:s:l:o:"
+    longOpts = (
+        "count=", "method=", "xor-value=", "start=", "length=", "output-file="
+    )
     try:
-        (opts, args) = getopt.getopt(sys.argv[1:], SHORT_OPTS, LONG_OPTS)
+        (opts, args) = getopt.getopt(sys.argv[1:], shortOpts, longOpts)
     except getopt.GetoptError:
-        exit("Error: unrecognized argument. See the readme file.")
-
+        sys.exit("Invalid command line argument.")
     opts = dict(opts)
-
-    # number of bytes to corrupt
-    byteCount = opts.get("--count", opts.get("-c", "1"))
-    try:
-        byteCount = int(byteCount, 0)
-    except ValueError:
-        exit("Error: byte count is not an integer.")
 
     # method
     method = opts.get("--method", opts.get("-m", "F")).upper()
     if method not in ("F", "I", "D", "R", "X"):
-        exit("Error: invalid method.")
+        sys.exit("Invalid command line method argument.")
 
     # XOR value
     XORValue = opts.get("--xor-value", opts.get("-x", "0xff"))
-    try:
-        XORValue = int(XORValue, 0)
-        if not 0x00 <= XORValue <= 0xff:
-            raise ValueError
-    except ValueError:
-        exit("Error: invalid XOR value.")
+    XORValue = parse_integer(XORValue, 0x00, 0xff, "XOR value")
 
-    # start address (validated later)
-    start = opts.get("--start", opts.get("-s", "0"))
-    try:
-        start = int(start, 0)
-    except ValueError:
-        exit("Error: start address is not an integer.")
-
-    # length (None = default, validated later)
-    length = opts.get("--length", opts.get("-l"))
-    if length is not None:
-        try:
-            length = int(length, 0)
-        except ValueError:
-            exit("Error: length is not an integer.")
-
-    # input file
+    # source file
     if len(args) != 1:
-        exit("Error: incorrect number of arguments. See the readme file.")
+        sys.exit("Invalid number of command line arguments.")
     source = args[0]
+    sourceSize = get_source_size(source)
 
-    # input file must exist
-    if not os.path.isfile(source):
-        exit("Error: input file not found.")
+    # start address
+    start = opts.get("--start", opts.get("-s", "0"))
+    start = parse_integer(start, 0, sourceSize - 1, "start address")
 
-    # get input file size
-    try:
-        size = os.path.getsize(source)
-    except OSError:
-        exit("Error getting input file size.")
-
-    # input file must not be empty
-    if size == 0:
-        exit("Error: the input file is empty.")
-
-    # validate start address against input file size
-    if not 0 <= start < size:
-        exit("Error: invalid start address.")
-
-    # use default length or validate it against input file size
+    # length
+    length = opts.get("--length", opts.get("-l"))
     if length is None:
-        length = size - start
-    elif not 0 < length <= size - start:
-        exit("Error: invalid length.")
+        length = sourceSize - start
+    else:
+        length = parse_integer(length, 1, sourceSize - start, "length")
 
-    # validate number of bytes to corrupt against input file size
-    if not 1 <= byteCount <= length:
-        exit("Error: invalid number of bytes to corrupt.")
+    # number of bytes to corrupt
+    byteCount = opts.get("--count", opts.get("-c", "1"))
+    byteCount = parse_integer(byteCount, 1, length, "byte count")
 
-    # output file (if unspecified, get nonexistent default name)
+    # target file
     target = opts.get("--output-file", opts.get("-o"))
     if target is None:
-        (root, ext) = os.path.splitext(source)
-        for i in range(1000):
-            target = "{:s}-corrupt{:d}{:s}".format(root, i, ext)
-            if not os.path.exists(target):
-                break
-
-    # output file must not exist
-    if os.path.exists(target):
-        exit("Error: target file already exists.")
-
-    # output directory must exist
-    dir = os.path.dirname(target)
-    if dir != "" and not os.path.isdir(dir):
-        exit("Error: target directory not found.")
+        target = create_target_filename(source)
+    validate_target_filename(target)
 
     return {
         "count": byteCount,
         "method": method,
-        "XORValue": XORValue,
+        "XOR": XORValue,
         "start": start,
         "length": length,
         "source": source,
         "target": target,
     }
 
-def pick_addresses(opts):
+def pick_addresses(settings):
     """Randomly pick addresses to corrupt. Yield in ascending order."""
 
-    range_ = range(opts["start"], opts["start"] + opts["length"])
-    addresses = random.sample(range_, opts["count"])
-    for address in sorted(addresses):
+    addressRange = range(settings["start"], settings["start"] + settings["length"])
+    for address in sorted(random.sample(addressRange, settings["count"])):
         yield address
 
 def read_slice(handle, bytesLeft):
@@ -135,7 +122,7 @@ def read_slice(handle, bytesLeft):
     Yield one chunk per call."""
 
     while bytesLeft:
-        chunkSize = min(bytesLeft, MAX_CHUNK_SIZE)
+        chunkSize = min(bytesLeft, 2 ** 20)
         yield handle.read(chunkSize)
         bytesLeft -= chunkSize
 
@@ -149,61 +136,68 @@ def corrupt_byte(byte, method, XORValue):
     """Corrupt one byte."""
 
     if method == "F":
-        # flip one randomly-selected bit (XOR with random power of two)
+        # flip random bit (XOR with random power of two)
         return byte ^ (1 << random.randrange(8))
     if method == "I":
         # increment
-        return (byte + 1) & BYTE_MAX
+        return (byte + 1) & 0xff
     if method == "D":
         # decrement
-        return (byte - 1) & BYTE_MAX
+        return (byte - 1) & 0xff
     if method == "R":
         # randomize (any value but the original)
-        values = list(range(byte)) + list(range(byte + 1, BYTE_MAX + 1))
-        return random.choice(values)
+        return random.choice(list(range(byte)) + list(range(byte + 1, 0xff + 1)))
     if method == "X":
         # XOR
         return byte ^ XORValue
+    sys.exit("Invalid method.")  # should never happen
 
-    exit("Invalid method.")  # should never happen
+def create_line_format(sourceSize):
+    """Create format code for printing corrupt bytes."""
 
-def copy_and_corrupt_byte(source, target, opts):
+    maxAddressLength = len(format(sourceSize - 1, "x"))
+    return "0x{{:0{:d}x}}: 0x{{:02x}} -> 0x{{:02x}}".format(maxAddressLength)
+
+def copy_and_corrupt_byte(source, target, settings, lineFormat):
     """Read one byte from one file, corrupt it, write to another file,
     print the change."""
 
     addr = source.tell()
     origByte = source.read(1)[0]
-    corruptByte = corrupt_byte(origByte, opts["method"], opts["XORValue"])
+    corruptByte = corrupt_byte(origByte, settings["method"], settings["XOR"])
     target.write(bytes((corruptByte,)))
+    print(lineFormat.format(addr, origByte, corruptByte))
 
-    print("0x{:04x}: 0x{:02x} -> 0x{:02x}".format(addr, origByte, corruptByte))
-
-def corrupt_file(source, target, opts):
+def corrupt_file(source, target, settings):
     """Read input file, write corrupt output file, print changes."""
 
-    fileSize = source.seek(0, 2)
+    sourceSize = source.seek(0, 2)
+    lineFormat = create_line_format(sourceSize)
     source.seek(0)
     target.seek(0)
 
     # for each address to corrupt...
-    for address in pick_addresses(opts):
+    for address in pick_addresses(settings):
         # copy unchanged data up to but not including corrupt byte
         copy_slice(source, target, address - source.tell())
-        # corrupt one byte
-        copy_and_corrupt_byte(source, target, opts)
-
+        # copy and corrupt one byte
+        copy_and_corrupt_byte(source, target, settings, lineFormat)
     # copy unchanged data after last corrupt byte
-    copy_slice(source, target, fileSize - source.tell())
+    copy_slice(source, target, sourceSize - source.tell())
 
 def main():
-    opts = parse_command_line_arguments()
+    """The main function."""
+
+    if sys.version_info[0] != 3:
+        print("Warning: possibly incompatible Python version.", file=sys.stderr)
+
+    settings = parse_command_line_arguments()
 
     try:
-        with open(opts["source"], "rb") as source, \
-        open(opts["target"], "wb") as target:
-            corrupt_file(source, target, opts)
+        with open(settings["source"], "rb") as source, open(settings["target"], "wb") as target:
+            corrupt_file(source, target, settings)
     except OSError:
-        exit("File read/write error.")
+        sys.exit("Error reading/writing files.")
 
 if __name__ == "__main__":
     main()
