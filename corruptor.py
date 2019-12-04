@@ -71,7 +71,7 @@ def parse_command_line_arguments():
 
     # XOR value
     XORValue = opts.get("--xor-value", opts.get("-x", "0xff"))
-    XORValue = parse_integer(XORValue, 0x00, 0xff, "XOR value")
+    XORValue = parse_integer(XORValue, 0x01, 0xff, "XOR value")
 
     # source file
     if len(args) != 1:
