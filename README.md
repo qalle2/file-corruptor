@@ -47,7 +47,7 @@ Integer arguments support hexadecimal values with the prefix `0x` (e.g. `0xff` =
 * `-o` *file* or `--output-file`=*file*
   * The file to write.
   * The file must not already exist (it will not be overwritten).
-  * Default: input file name with `-corrupt#` inserted before the extension, where `#` is the first integer between 0 and 999 that results in a nonexistent file (e.g. `smb.nes` &rarr; `smb-corrupt0.nes`, `smb-corrupt1.nes`, etc.).
+  * Default: input file name with `-corrupt#` inserted before the extension, where `#` is the first integer between 1 and 1000 that results in a nonexistent file (e.g. `smb.nes` &rarr; `smb-corrupt1.nes`, `smb-corrupt2.nes`, etc.).
 
 With default `-s` and `-l`, the addresses to corrupt will be picked from anywhere in the file.
 
@@ -57,7 +57,7 @@ With default `-s` and `-l`, the addresses to corrupt will be picked from anywher
 
 ## Examples
 
-Read `smb.nes`, corrupt one byte anywhere by flipping a randomly selected bit, save as `smb-corrupt0.nes` (or `smb-corrupt1.nes` if it already exists, etc.):
+Read `smb.nes`, corrupt one byte anywhere by flipping a randomly selected bit, save as `smb-corrupt1.nes`:
 
 ```
 python corruptor.py smb.nes
