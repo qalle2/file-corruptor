@@ -11,13 +11,13 @@ Integer arguments support hexadecimal values with the prefix `0x` (e.g. `0xff` =
 
 ### *options*
 
-* `-c` *count* or `--count`=*count*
+* `-c` *count*, `--count` *count*
   * The number of bytes to corrupt.
   * *count* is an integer:
     * minimum: 1
     * default: 1
     * maximum: same as *length* (see below)
-* `-m` *method* or `--method`=*method*
+* `-m` *method*, `--method` *method*
   * How to corrupt (change) each byte.
   * *method* is one of the following (case insensitive):
     * `F`: flip one randomly-selected bit (the default; e.g. `0x00` &rarr; `0x80`/`0x40`/etc.)
@@ -25,26 +25,26 @@ Integer arguments support hexadecimal values with the prefix `0x` (e.g. `0xff` =
     * `D`: decrement (subtract one; `0x00` underflows to `0xff`)
     * `R`: randomize (replace with any value but the original)
     * `X`: XOR the byte with a constant (see `-x`)
-* `-x` *value* or `--xor-value`=*value*
+* `-x` *value*, `--xor-value` *value*
   * The constant to XOR each byte with.
   * Has no effect with *method*s other than `X`.
   * *value* is an integer:
-    * minimum: `0x00`
+    * minimum: `0x01`
     * default: `0xff`
     * maximum: `0xff`
-* `-s` *start* or `--start`=*start*
+* `-s` *start*, `--start` *start*
   * The start of the address range where the bytes to corrupt will be picked from.
   * *start* is an integer:
     * minimum: 0 (the first byte of the file)
     * default: 0
     * maximum: size of *input_file* in bytes, minus one
-* `-l` *length* or `--length`=*length*
+* `-l` *length*, `--length` *length*
   * The length of the address range where the bytes to corrupt will be picked from.
   * *length* is an integer:
     * minimum: 1
     * default: size of *input_file* in bytes, minus *start*
     * maximum: size of *input_file* in bytes, minus *start*
-* `-o` *file* or `--output-file`=*file*
+* `-o` *file*, `--output-file` *file*
   * The file to write.
   * The file must not already exist (it will not be overwritten).
   * Default: input file name with `-corrupt#` inserted before the extension, where `#` is the first integer between 1 and 1000 that results in a nonexistent file (e.g. `smb.nes` &rarr; `smb-corrupt1.nes`, `smb-corrupt2.nes`, etc.).
