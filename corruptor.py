@@ -5,7 +5,7 @@ import os
 import random  # not for cryptographic use!
 import sys
 
-def parse_command_line_arguments():
+def parse_args():
     """Parse command line arguments using argparse."""
 
     parser = argparse.ArgumentParser(
@@ -14,19 +14,24 @@ def parse_command_line_arguments():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
-    parser.add_argument("-c", "--count", type=int, default=1, help="How many bytes to corrupt.")
+    parser.add_argument(
+        "-c", "--count", type=int, default=1, help="Number of bytes to corrupt."
+    )
     parser.add_argument(
         "-m", "--method", choices=("f", "i", "a", "r"), default="f",
-        help="How to corrupt each byte: f=flip one of the bits; i=invert all bits, a=add or "
-        "subtract one (255<->0), r=randomize (any value but the original)."
+        help="How to corrupt a byte: f = flip 1 bit, i = invert all bits, a = add or subtract 1 "
+        "(255 <-> 0), r = randomize (any value but original)."
     )
     parser.add_argument(
         "-s", "--start", type=int, default=0,
-        help="The start of the range to pick addresses from (0=first byte)."
+        help="Start of range to pick addresses from (0 or greater)."
     )
     parser.add_argument(
         "-l", "--length", type=int, default=0,
-        help="The length of the range to pick addresses from (0=to the end of the file)."
+        help="Length of range to pick addresses from (0 = to end of file)."
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Print changes."
     )
     parser.add_argument(
         "input_file", help="The file to read."
@@ -37,75 +42,87 @@ def parse_command_line_arguments():
 
     args = parser.parse_args()
 
-    if args.count < 1:
-        sys.exit("Number of bytes must be one or greater.")
-    if args.start < 0:
-        sys.exit("Start of address range must be zero or greater.")
-    if args.length < 0:
-        sys.exit("Length of address range must be zero or greater.")
+    # validate file args
     if not os.path.isfile(args.input_file):
         sys.exit("Input file not found.")
+    try:
+        fileSize = os.path.getsize(args.input_file)
+    except OSError:
+        sys.exit("Could not get input file size.")
+    if fileSize == 0:
+        sys.exit("Input file is empty.")
     if os.path.exists(args.output_file):
         sys.exit("Output file already exists.")
 
+    # validate integer args
+    if not 0 <= args.start < fileSize:
+        sys.exit("Address range start must be 0 to (file size - 1).")
+    if not 0 <= args.length <= fileSize - args.start:
+        sys.exit("Address range length must be 0 to (file size - address range start).")
+    if not 1 <= args.count <= (args.length if args.length else fileSize - args.start):
+        sys.exit("Number of bytes to corrupt must be 1 to (address range length).")
+
     return args
 
-def copy_file_slice(source, target, bytesLeft):
-    """Copy a slice from one file to another."""
-
-    while bytesLeft:
-        chunkSize = min(bytesLeft, 2 ** 20)
-        target.write(source.read(chunkSize))
-        bytesLeft -= chunkSize
-
-def corrupt_byte(byte, method):
-    """Corrupt a byte."""
-
-    if method == "f":
-        return byte ^ (1 << random.randrange(8))  # flip one bit (XOR with a power of two)
-    if method == "i":
-        return byte ^ 0xff  # invert all bits
-    if method == "a":
-        return (byte + random.choice((-1, 1))) % 256  # add/subtract one
-    if method == "r":
-        return random.choice(list(set(range(256)) - set((byte,))))  # randomize
-    assert False  # should never happen
-    return None  # for pylint
-
-def corrupt_file(source, target, settings):
+def corrupt_file(source, target, args):
     """Read input file, write corrupt output file, print changes."""
 
-    # get file size and range length; further validate the range
-    fileSize = source.seek(0, 2)
-    rangeLength = settings.length if settings.length else fileSize - settings.start
-    if rangeLength < 1 or settings.start + rangeLength > fileSize:
-        sys.exit("Invalid address range.")
-    if settings.count > rangeLength:
-        sys.exit("Too many bytes to corrupt.")
+    def flip_bit(byte):
+        return byte ^ (1 << random.randrange(8))  # flip one bit
 
+    def invert_byte(byte):
+        return byte ^ 0xff  # invert all bits
+
+    def add_sub(byte):
+        return (byte + random.choice((-1, 1))) & 0xff  # add or subtract one
+
+    def randomize(byte):
+        return random.choice(list(set(range(0x100)) - set((byte,))))  # any but original
+
+    def copy_slice(source, target, bytesLeft):
+        """Copy a slice from one file to another."""
+
+        while bytesLeft:
+            chunkSize = min(bytesLeft, 2 ** 20)
+            target.write(source.read(chunkSize))
+            bytesLeft -= chunkSize
+
+    corruptorFunction = {
+        "f": flip_bit,
+        "i": invert_byte,
+        "a": add_sub,
+        "r": randomize,
+    }[args.method]
+
+    fileSize = source.seek(0, 2)
+    addrRange = range(args.start, args.start + args.length if args.length else fileSize)
     source.seek(0)
     target.seek(0)
 
     # pick addresses to corrupt
-    addresses = range(settings.start, settings.start + rangeLength)
-    for address in sorted(random.sample(addresses, settings.count)):
-        # copy unchanged bytes before the address
-        copy_file_slice(source, target, address - source.tell())
-        # copy and corrupt the byte
-        byte = corrupt_byte(source.read(1)[0], settings.method)
-        target.write(bytes((byte,)))
-    # copy unchanged bytes after the last corrupt byte
-    copy_file_slice(source, target, fileSize - source.tell())
+    for address in sorted(random.sample(addrRange, args.count)):
+        # copy unchanged bytes before address
+        copy_slice(source, target, address - source.tell())
+        # copy and corrupt one byte
+        origByte = source.read(1)[0]
+        corruptByte = corruptorFunction(origByte)
+        if args.verbose:
+            print(f"0x{address:04x}: 0x{origByte:02x} -> 0x{corruptByte:02x}")
+        target.write(bytes((corruptByte,)))
+    # copy unchanged bytes after last corrupt byte
+    copy_slice(source, target, fileSize - source.tell())
 
 def main():
     """The main function."""
 
-    settings = parse_command_line_arguments()
+    args = parse_args()
     try:
-        with open(settings.input_file, "rb") as source, open(settings.output_file, "wb") as target:
-            corrupt_file(source, target, settings)
+        with open(args.input_file, "rb") as source, \
+        open(args.output_file, "wb") as target:
+            corrupt_file(source, target, args)
     except OSError:
         sys.exit("Error reading/writing files.")
 
 if __name__ == "__main__":
     main()
+
