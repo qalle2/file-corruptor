@@ -3,26 +3,32 @@ rm -f test-out/*.nes
 
 echo "=== Default settings ==="
 python3 corruptor.py smb.nes test-out/default1.nes
+cmp -l smb.nes test-out/default1.nes
 echo
 
 echo "=== Verbose ==="
 python3 corruptor.py --verbose smb.nes test-out/default2.nes
+cmp -l smb.nes test-out/default2.nes
 echo
 
 echo "=== Last byte ==="
 python3 corruptor.py --start 40975 --verbose smb.nes test-out/lastbyte.nes
+cmp -l smb.nes test-out/lastbyte.nes
 echo
 
 echo "=== Invert all bits ==="
 python3 corruptor.py --method i --verbose smb.nes test-out/invert.nes
+cmp -l smb.nes test-out/invert.nes
 echo
 
 echo "=== Add/subtract 1 to/from 4 bytes ==="
 python3 corruptor.py --count 4 --method a --verbose smb.nes test-out/addsub.nes
+cmp -l smb.nes test-out/addsub.nes
 echo
 
-echo "=== Randomize 4 bytes between 8000...8447 ==="
+echo "=== Randomize 4 bytes between 0x2000...0x20ff ==="
 python3 corruptor.py --count 4 --method r --start 8192 --length 256 --verbose smb.nes test-out/randomize4.nes
+cmp -l smb.nes test-out/randomize4.nes
 echo
 
 echo "=== Invalid args (should print 4 errors) ==="
