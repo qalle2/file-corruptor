@@ -1,7 +1,7 @@
 import argparse, os, random, sys
 
 def parse_args():
-    """Parse command line arguments using argparse."""
+    # parse command line arguments
 
     parser = argparse.ArgumentParser(
         description="Make a corrupt copy of a file. The addresses to corrupt will be randomly "
@@ -12,9 +12,10 @@ def parse_args():
         "-c", "--count", type=int, default=1, help="Number of bytes to corrupt (default=1)."
     )
     parser.add_argument(
-        "-m", "--method", choices=("f", "i", "a", "r"), default="f",
-        help="How to corrupt a byte: f = flip 1 bit (default), i = invert all bits, a = add or "
-        "subtract 1 (255 <-> 0), r = randomize (any value but original)."
+        "-m", "--method", choices=("f", "i", "o", "a", "r"), default="f",
+        help="How to corrupt a byte: f = flip 1 bit (default), i = invert all bits, o = rotate "
+        "bits a random amount, a = add or subtract 1 (255 <-> 0), r = randomize (any value but "
+        "original)."
     )
     parser.add_argument(
         "-s", "--start", type=int, default=0,
@@ -58,23 +59,21 @@ def parse_args():
 
     return args
 
-# --------------------------------------------------------------------------------------------------
-
 def flip_bit(byte):
-    # flip one bit
-    return byte ^ (1 << random.randrange(8))
+    return byte ^ (1 << random.randrange(8))  # flip 1 bit
 
 def invert_byte(byte):
-    # invert all bits
-    return byte ^ 0xff
+    return byte ^ 0xff  # invert all bits
+
+def rotate_bits(byte):
+    n = random.randrange(1, 8)
+    return ((byte << n) & 0xff) | (byte >> (8 - n))  # rotate bits left
 
 def add_or_subtract(byte):
-    # add or subtract one
-    return (byte + random.choice((-1, 1))) & 0xff
+    return (byte + random.choice((-1, 1))) & 0xff  # add/subtract 1
 
 def randomize(byte):
-    # replace with any other value
-    return random.choice(list(set(range(0x100)) - set((byte,))))
+    return random.choice(list(set(range(0x100)) - {byte}))  # replace with any other value
 
 def copy_slice(source, target, bytesLeft):
     # copy a slice from one file to another
@@ -84,17 +83,18 @@ def copy_slice(source, target, bytesLeft):
         bytesLeft -= chunkSize
 
 def corrupt_file(source, target, args):
-    """Read input file, write corrupt output file, print changes."""
+    # read input file, write corrupt output file, print changes
 
     corruptorFunction = {
         "f": flip_bit,
         "i": invert_byte,
+        "o": rotate_bits,
         "a": add_or_subtract,
         "r": randomize,
     }[args.method]
 
     fileSize = source.seek(0, 2)
-    addrRange = range(args.start, args.start + args.length if args.length else fileSize)
+    addrRange = range(args.start, (args.start + args.length) if args.length else fileSize)
     source.seek(0)
     target.seek(0)
 
@@ -111,12 +111,14 @@ def corrupt_file(source, target, args):
     # copy unchanged bytes after last corrupt byte
     copy_slice(source, target, fileSize - source.tell())
 
-# --------------------------------------------------------------------------------------------------
+def main():
+    args = parse_args()
 
-args = parse_args()
+    try:
+        with open(args.input_file, "rb") as source, open(args.output_file, "wb") as target:
+            corrupt_file(source, target, args)
+    except OSError:
+        sys.exit("Error reading/writing files.")
 
-try:
-    with open(args.input_file, "rb") as source, open(args.output_file, "wb") as target:
-        corrupt_file(source, target, args)
-except OSError:
-    sys.exit("Error reading/writing files.")
+if __name__ == "__main__":
+    main()
