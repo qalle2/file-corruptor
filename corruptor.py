@@ -12,10 +12,10 @@ def parse_args():
         help="Number of bytes to corrupt (default=1)."
     )
     parser.add_argument(
-        "-m", "--method", choices=("f", "i", "o", "a", "r"), default="f",
+        "-m", "--method", choices=("f", "i", "a", "r"), default="f",
         help="How to corrupt a byte: f = flip 1 bit (default), i = invert "
-        "all bits, o = rotate bits a random amount, a = add or subtract 1 "
-        "(255 <-> 0), r = randomize (any value but original)."
+        "all bits, a = add or subtract 1 (255 <-> 0), r = randomize (any "
+        "value but original)."
     )
     parser.add_argument(
         "-s", "--start", type=int, default=0,
@@ -70,11 +70,6 @@ def invert_byte(byte):
     # invert all bits
     return byte ^ 0xff
 
-def rotate_bits(byte):
-    # rotate bits left
-    n = random.randrange(1, 8)
-    return ((byte << n) & 0xff) | (byte >> (8 - n))
-
 def add_or_subtract(byte):
     # add/subtract 1
     return (byte + random.choice((-1, 1))) & 0xff
@@ -96,7 +91,6 @@ def corrupt_file(source, target, args):
     corruptorFunction = {
         "f": flip_bit,
         "i": invert_byte,
-        "o": rotate_bits,
         "a": add_or_subtract,
         "r": randomize,
     }[args.method]

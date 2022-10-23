@@ -9,35 +9,28 @@ diff \
 echo
 
 echo "=== Flip 1 bit in 4 bytes ==="
-python3 corruptor.py -mf -c4 -v test.bin test-out/flip.bin
+python3 corruptor.py -mf -c4 test.bin test-out/flip.bin
 diff \
     <(od -Ax -tx1 -v -w1 test.bin) \
     <(od -Ax -tx1 -v -w1 test-out/flip.bin) | grep "^[<>]"
 echo
 
-echo "=== Invert all bits in 4 bytes ==="
+echo "=== Invert all bits in 4 bytes, verbose ==="
 python3 corruptor.py -mi -c4 -v test.bin test-out/invert.bin
 diff \
     <(od -Ax -tx1 -v -w1 test.bin) \
     <(od -Ax -tx1 -v -w1 test-out/invert.bin) | grep "^[<>]"
 echo
 
-echo "=== Rotate bits in 4 bytes ==="
-python3 corruptor.py -mo -c4 -v test.bin test-out/rotate.bin
-diff \
-    <(od -Ax -tx1 -v -w1 test.bin) \
-    <(od -Ax -tx1 -v -w1 test-out/rotate.bin) | grep "^[<>]"
-echo
-
 echo "=== Add/subtract 1 in last 4 bytes ==="
-python3 corruptor.py -ma -c4 -s252 -v test.bin test-out/addsub.bin
+python3 corruptor.py -ma -c4 -s252 test.bin test-out/addsub.bin
 diff \
     <(od -Ax -tx1 -v -w1 test.bin) \
     <(od -Ax -tx1 -v -w1 test-out/addsub.bin) | grep "^[<>]"
 echo
 
 echo "=== Randomize 4 bytes between 0x0080-0x008f ==="
-python3 corruptor.py -mr -c4 -s128 -l16 -v test.bin test-out/randomize.bin
+python3 corruptor.py -mr -c4 -s128 -l16 test.bin test-out/randomize.bin
 diff \
     <(od -Ax -tx1 -v -w1 test.bin) \
     <(od -Ax -tx1 -v -w1 test-out/randomize.bin) | grep "^[<>]"
